@@ -2,6 +2,7 @@
 import numpy as np
 import tensorflow as tf
 
+
 from poke_env.player.env_player import Gen8EnvSinglePlayer
 from poke_env.player.random_player import RandomPlayer
 
@@ -10,7 +11,7 @@ from rl.policy import LinearAnnealedPolicy, EpsGreedyQPolicy, BoltzmannQPolicy, 
 from rl.memory import SequentialMemory
 from keras.layers import Dense, Flatten
 from keras.models import Sequential
-from keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam
 
 
 ## RL Agent Class
@@ -113,7 +114,7 @@ if __name__ == "__main__":
 
     # setting up model for agent 1
     model = Sequential()
-    model.add(Dense(128, activation="elu", input_shape=(1, 10)))
+    model.add(Dense(128, activation="elu", input_shape=(1, 10,)))
     # embeddings have shape (1, 10), which affects our hidden layer dimension and output dimension
     model.add(Flatten())
     model.add(Dense(64, activation="elu"))
@@ -129,23 +130,7 @@ if __name__ == "__main__":
         value_test=0,
         nb_steps=10000,
     )
-    policy2 = LinearAnnealedPolicy(
-        GreedyQPolicy(),    # greedy q policy
-        attr="eps",
-        value_max=1.0,
-        value_min=0.05,
-        value_test=0,
-        nb_steps=10000,
-    )
-    policy3 = LinearAnnealedPolicy(
-        BoltzmannQPolicy(), #boltzmann q policy
-        attr="eps",
-        value_max=1.0,
-        value_min=0.05,
-        value_test=0,
-        nb_steps=10000,
-    )
-    
+
     ### Agent 1
     # Defining DQN for agent 1
     dqn1 = DQNAgent(
@@ -161,7 +146,7 @@ if __name__ == "__main__":
     )
     
     ## Compile dqn using the Adam optimizer
-    dqn1.compile(Adam(lr=0.00025), metrics=["mae"])
+    dqn1.compile(Adam(learning_rate=0.00025), metrics=["mae"])
     
     ## Training agent 1
     agent1.play_against( env_algorithm=dqn_training, opponent=opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_steps": NB_TRAINING_STEPS},)
@@ -187,7 +172,7 @@ if __name__ == "__main__":
     dqn2 = DQNAgent(
         model=model2,
         nb_actions=len(agent2.action_space),
-        policy=policy2,
+        policy=GreedyQPolicy(),
         memory=memory,
         nb_steps_warmup=1000,
         gamma=0.5,
@@ -216,7 +201,16 @@ if __name__ == "__main__":
     model.add(Dense(64, activation="elu"))
     model.add(Dense(n_action3, activation="linear"))
     memory = SequentialMemory(limit=10000, window_length=1)
-
+    
+    policy3 = LinearAnnealedPolicy(
+        BoltzmannQPolicy(), #boltzmann q policy
+        attr="tau",
+        value_max=1.0,
+        value_min=0.05,
+        value_test=0,
+        nb_steps=10000,
+    )
+    
     # defining dqn for agent 3    
     dqn3 = DQNAgent(
         model=model,
@@ -240,4 +234,3 @@ if __name__ == "__main__":
     agent3.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
     print("\nAgent 3 results against max player:")
     agent3.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
-  

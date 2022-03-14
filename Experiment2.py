@@ -10,7 +10,7 @@ from rl.policy import LinearAnnealedPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
 from keras.layers import Dense, Flatten
 from keras.models import Sequential
-from keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam
 
 
 ## RL Agent Class
@@ -101,6 +101,7 @@ if __name__ == "__main__":
     agent1 = RLAgent(battle_format="gen8randombattle")
     agent2 = RLAgent(battle_format="gen8randombattle")
     agent3 = RLAgent(battle_format="gen8randombattle")
+    agent4 = RLAgent(battle_format="gen8randombattle")
 
     # Opponents:
     opponent = RandomPlayer(battle_format="gen8randombattle")  # to train agent1
@@ -111,6 +112,7 @@ if __name__ == "__main__":
     n_action1 = len(agent1.action_space)
     n_action2 = len(agent2.action_space)
     n_action3 = len(agent3.action_space)
+    n_action4 = len(agent4.action_space)
 
     # setting up model for agent 1
     model = Sequential()
@@ -146,6 +148,14 @@ if __name__ == "__main__":
         value_test=0,
         nb_steps=10000,
     )
+    policy4 = LinearAnnealedPolicy(
+        EpsGreedyQPolicy(),
+        attr="eps",
+        value_max=1.0,
+        value_min=0.05,
+        value_test=0,
+        nb_steps=10000,
+    )
     
     ### Agent 1
     ## Defining DQN for agent 1
@@ -162,7 +172,7 @@ if __name__ == "__main__":
     )
     
     # Compile dqn using the Adam optimizer
-    dqn1.compile(Adam(lr=0.00025), metrics=["mae"])
+    dqn1.compile(Adam(learning_rate=0.00025), metrics=["mae"])
     
     ## Training agent 1
 	# plays against random player
@@ -196,7 +206,7 @@ if __name__ == "__main__":
         delta_clip=0.01,
         enable_double_dqn=True,
     )
-    dqn2.compile(Adam(lr=0.00025), metrics=["mae"])
+    dqn2.compile(Adam(learning_rate=0.00025), metrics=["mae"])
 
     ## Training agent 2
 	# playes against MaxDamagePlayer
@@ -231,9 +241,9 @@ if __name__ == "__main__":
         delta_clip=0.01,
         enable_double_dqn=True,
     )
-    dqn3.compile(Adam(lr=0.00025), metrics=["mae"])
+    dqn3.compile(Adam(learning_rate=0.00025), metrics=["mae"])
 
-    ## Training agent 3
+    ## Training agent 4
 	# plays against other RL agent
     agent3.play_against( env_algorithm=dqn_training, opponent=agent1, env_algorithm_kwargs={"dqn": dqn3, "nb_steps": NB_TRAINING_STEPS},)
     model.save("model_%d" % NB_TRAINING_STEPS)
@@ -243,4 +253,38 @@ if __name__ == "__main__":
     agent3.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
     print("\nAgent 3 results against max player:")
     agent3.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
-  
+
+    ### Agent 4
+    #Setting up model
+    model = Sequential()
+    model.add(Dense(128, activation="elu", input_shape=(1, 10)))
+    # embeddings have shape (1, 10), which affects our hidden layer dimension and output dimension
+    model.add(Flatten())
+    model.add(Dense(64, activation="elu"))
+    model.add(Dense(n_action4, activation="linear"))
+    memory = SequentialMemory(limit=10000, window_length=1)
+
+    # defining dqn for agent 4    
+    dqn4 = DQNAgent(
+        model=model,
+        nb_actions=len(agent4.action_space),
+        policy=policy4,
+        memory=memory,
+        nb_steps_warmup=1000,
+        gamma=0.5,
+        target_model_update=1,
+        delta_clip=0.01,
+        enable_double_dqn=True,
+    )
+    dqn4.compile(Adam(learning_rate=0.00025), metrics=["mae"])
+
+    ## Training agent 3
+	# plays against other RL agent
+    agent4.play_against( env_algorithm=dqn_training, opponent=agent2, env_algorithm_kwargs={"dqn": dqn4, "nb_steps": NB_TRAINING_STEPS},)
+    model.save("model_%d" % NB_TRAINING_STEPS)
+
+    # Evaluating agent 3
+    print("Agent 4 results against random player:")
+    agent4.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn4, "nb_episodes": NB_EVALUATION_EPISODES},)
+    print("\nAgent 4 results against max player:")
+    agent4.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn4, "nb_episodes": NB_EVALUATION_EPISODES},)
