@@ -13,6 +13,6 @@ RL for Pokémon Battling
 
 **Experiment5.py** - (in progress) PPO experiment
 
-
+Final results and report from experiments can be found [here](https://github.com/JuliaLWang8/Pokemon-Battling-RL/blob/master/FinalReport.pdf)
 
 Pokemon showdown environment forked from https://github.com/smogon/pokemon-showdown
