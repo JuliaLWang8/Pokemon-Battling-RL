@@ -11,7 +11,7 @@ RL for Pokémon Battling
 
 **Experiment4.py** - Round Robin with Minimax Algorithm
 
-**Experiment5.py** - policy Hyperparameter Tuning
+**Experiment5.py** - (in progress) PPO experiment
 
 
 
