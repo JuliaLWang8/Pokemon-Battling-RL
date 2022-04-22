@@ -2,15 +2,18 @@
 import numpy as np
 import tensorflow as tf
 
+
 from poke_env.player.env_player import Gen8EnvSinglePlayer
 from poke_env.player.random_player import RandomPlayer
 
 from rl.agents.dqn import DQNAgent
-from rl.policy import LinearAnnealedPolicy, EpsGreedyQPolicy
+from rl.policy import LinearAnnealedPolicy, EpsGreedyQPolicy, BoltzmannQPolicy, GreedyQPolicy
 from rl.memory import SequentialMemory
 from keras.layers import Dense, Flatten
 from keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
+
+import MiniMax
 
 
 ## RL Agent Class
@@ -51,7 +54,7 @@ class RLAgent(Gen8EnvSinglePlayer):
     def compute_reward(self, battle) -> float:
         ## computes reward
         return self.reward_computing_helper(
-            battle, fainted_value=2, hp_value=1, victory_value=30
+            battle, fainted_value=5, hp_value=1, victory_value=30
         )
 
 
@@ -81,7 +84,7 @@ np.random.seed(0)
 def dqn_training(player, dqn, nb_steps):
     dqn.fit(player, nb_steps=nb_steps)
     player.complete_current_battle()
-
+    print(f'player training complete')
 
 def dqn_evaluation(player, dqn, nb_episodes):
     # Reset battle statistics
@@ -95,70 +98,44 @@ def dqn_evaluation(player, dqn, nb_episodes):
 
 
 if __name__ == "__main__":
-
-    ### Experiment 2: Effects of changing training opponent
-    ## Creating the 3 agents to be trained against different opponents
+    tf.keras.backend.clear_session()
+    ### Experiment 1: Effects of changing policies
+    ## Creating the 3 agents to be trained with different policies
     agent1 = RLAgent(battle_format="gen8randombattle")
     agent2 = RLAgent(battle_format="gen8randombattle")
     agent3 = RLAgent(battle_format="gen8randombattle")
-    agent4 = RLAgent(battle_format="gen8randombattle")
 
-    # Opponents:
-    opponent = RandomPlayer(battle_format="gen8randombattle")  # to train agent1
-    second_opponent = MaxDamagePlayer(battle_format="gen8randombattle") # to train agent 2
-	# agent3 trained against another RL agent
+    # Opponents to train against and test are the same
+    opponent = RandomPlayer(battle_format="gen8randombattle")  
+    second_opponent = MaxDamagePlayer(battle_format="gen8randombattle")
+    third_opponent = MiniMax.MinimaxPlayer(battle_format="gen8randombattle")
 
     ## Output dimensions
     n_action1 = len(agent1.action_space)
     n_action2 = len(agent2.action_space)
     n_action3 = len(agent3.action_space)
-    n_action4 = len(agent4.action_space)
 
     # setting up model for agent 1
     model = Sequential()
-    model.add(Dense(128, activation="elu", input_shape=(1, 10)))
+    model.add(Dense(128, activation="elu", input_shape=(1, 10,)))
     # embeddings have shape (1, 10), which affects our hidden layer dimension and output dimension
     model.add(Flatten())
     model.add(Dense(64, activation="elu"))
     model.add(Dense(n_action1, activation="linear"))
     memory = SequentialMemory(limit=10000, window_length=1)
 
-    ### Creating policy (same across 3 agents)
+    ### Creating policies
     policy1 = LinearAnnealedPolicy(
-        EpsGreedyQPolicy(),
+        EpsGreedyQPolicy(), # eps greedy q policy
         attr="eps",
         value_max=1.0,
         value_min=0.05,
         value_test=0,
         nb_steps=10000,
     )
-    policy2 = LinearAnnealedPolicy(
-        EpsGreedyQPolicy(),
-        attr="eps",
-        value_max=1.0,
-        value_min=0.05,
-        value_test=0,
-        nb_steps=10000,
-    )
-    policy3 = LinearAnnealedPolicy(
-        EpsGreedyQPolicy(),
-        attr="eps",
-        value_max=1.0,
-        value_min=0.05,
-        value_test=0,
-        nb_steps=10000,
-    )
-    policy4 = LinearAnnealedPolicy(
-        EpsGreedyQPolicy(),
-        attr="eps",
-        value_max=1.0,
-        value_min=0.05,
-        value_test=0,
-        nb_steps=10000,
-    )
-    
+
     ### Agent 1
-    ## Defining DQN for agent 1
+    # Defining DQN for agent 1
     dqn1 = DQNAgent(
         model=model,
         nb_actions=len(agent1.action_space),
@@ -171,34 +148,36 @@ if __name__ == "__main__":
         enable_double_dqn=True,
     )
     
-    # Compile dqn using the Adam optimizer
+    ## Compile dqn using the Adam optimizer
     dqn1.compile(Adam(learning_rate=0.00025), metrics=["mae"])
     
     ## Training agent 1
-	# plays against random player
-    agent1.play_against( env_algorithm=dqn_training, opponent=opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_steps": NB_TRAINING_STEPS},)
-    model.save("model_%d" % NB_TRAINING_STEPS)
+    agent1.play_against(env_algorithm=dqn_training, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_steps": NB_TRAINING_STEPS},)
+    model.save(f"model_1_{NB_TRAINING_STEPS}")
 
-    ## Evaluating agent 1
-    print("Agent 1 results against random player:")
-    agent1.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_episodes": NB_EVALUATION_EPISODES},)
-    print("\nAgent 1 results against max player:")
-    agent1.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_episodes": NB_EVALUATION_EPISODES},)
-  
+    # Evaluating agent 1
+    # print("Agent 1 results against random player:")
+    # agent1.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_episodes": NB_EVALUATION_EPISODES},)
+    # print("\nAgent 1 results against max player:")
+    # agent1.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_episodes": NB_EVALUATION_EPISODES},)
+    print("\nAgent 1 results against minimax player:")
+    agent1.play_against(env_algorithm=dqn_evaluation, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn1, "nb_episodes": NB_EVALUATION_EPISODES},)
+    
     ### Agent 2
-    ## Setting up model
+    #Setting up model
     model2 = Sequential()
     model2.add(Dense(128, activation="elu", input_shape=(1, 10)))
+    # embeddings have shape (1, 10), which affects our hidden layer dimension and output dimension
     model2.add(Flatten())
     model2.add(Dense(64, activation="elu"))
     model2.add(Dense(n_action2, activation="linear"))
     memory = SequentialMemory(limit=10000, window_length=1)
 
-    ## defining dqn for agent 2
+    # defining dqn for agent 2
     dqn2 = DQNAgent(
         model=model2,
         nb_actions=len(agent2.action_space),
-        policy=policy2,
+        policy=GreedyQPolicy(),
         memory=memory,
         nb_steps_warmup=1000,
         gamma=0.5,
@@ -206,19 +185,21 @@ if __name__ == "__main__":
         delta_clip=0.01,
         enable_double_dqn=True,
     )
-    dqn2.compile(Adam(learning_rate=0.00025), metrics=["mae"])
+    dqn2.compile(Adam(lr=0.00025), metrics=["mae"])
 
-    ## Training agent 2
-	# playes against MaxDamagePlayer
-    agent2.play_against( env_algorithm=dqn_training, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_steps": NB_TRAINING_STEPS},)
-    model2.save("model_%d" % NB_TRAINING_STEPS)
+    # Training agent 2
+    agent2.play_against( env_algorithm=dqn_training, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_steps": NB_TRAINING_STEPS},)
+    model.save(f"model_2_{NB_TRAINING_STEPS}")
 
-    ## Evaluating agent 2
-    print("Agent 2 results against random player:")
-    agent2.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_episodes": NB_EVALUATION_EPISODES},)
-    print("\nAgent 2 results against max player:")
-    agent2.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_episodes": NB_EVALUATION_EPISODES},)
-  
+    # Evaluating agent 2
+    # print("Agent 2 results against random player:")
+    # agent2.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_episodes": NB_EVALUATION_EPISODES},)
+    # print("\nAgent 2 results against max player:")
+    # agent2.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_episodes": NB_EVALUATION_EPISODES},)
+    print("\nAgent 2 results against minimax player:")
+    agent2.play_against(env_algorithm=dqn_evaluation, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn2, "nb_episodes": NB_EVALUATION_EPISODES},)
+
+
     ### Agent 3
     #Setting up model
     model = Sequential()
@@ -228,7 +209,16 @@ if __name__ == "__main__":
     model.add(Dense(64, activation="elu"))
     model.add(Dense(n_action3, activation="linear"))
     memory = SequentialMemory(limit=10000, window_length=1)
-
+    
+    policy3 = LinearAnnealedPolicy(
+        BoltzmannQPolicy(), #boltzmann q policy
+        attr="tau",
+        value_max=1.0,
+        value_min=0.05,
+        value_test=0,
+        nb_steps=10000,
+    )
+    
     # defining dqn for agent 3    
     dqn3 = DQNAgent(
         model=model,
@@ -241,50 +231,16 @@ if __name__ == "__main__":
         delta_clip=0.01,
         enable_double_dqn=True,
     )
-    dqn3.compile(Adam(learning_rate=0.00025), metrics=["mae"])
-
-    ## Training agent 4
-	# plays against other RL agent
-    agent3.play_against( env_algorithm=dqn_training, opponent=agent1, env_algorithm_kwargs={"dqn": dqn3, "nb_steps": NB_TRAINING_STEPS},)
-    model.save("model_%d" % NB_TRAINING_STEPS)
-
-    # Evaluating agent 3
-    print("Agent 3 results against random player:")
-    agent3.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
-    print("\nAgent 3 results against max player:")
-    agent3.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
-
-    ### Agent 4
-    #Setting up model
-    model = Sequential()
-    model.add(Dense(128, activation="elu", input_shape=(1, 10)))
-    # embeddings have shape (1, 10), which affects our hidden layer dimension and output dimension
-    model.add(Flatten())
-    model.add(Dense(64, activation="elu"))
-    model.add(Dense(n_action4, activation="linear"))
-    memory = SequentialMemory(limit=10000, window_length=1)
-
-    # defining dqn for agent 4    
-    dqn4 = DQNAgent(
-        model=model,
-        nb_actions=len(agent4.action_space),
-        policy=policy4,
-        memory=memory,
-        nb_steps_warmup=1000,
-        gamma=0.5,
-        target_model_update=1,
-        delta_clip=0.01,
-        enable_double_dqn=True,
-    )
-    dqn4.compile(Adam(learning_rate=0.00025), metrics=["mae"])
+    dqn3.compile(Adam(lr=0.00025), metrics=["mae"])
 
     ## Training agent 3
-	# plays against other RL agent
-    agent4.play_against( env_algorithm=dqn_training, opponent=agent2, env_algorithm_kwargs={"dqn": dqn4, "nb_steps": NB_TRAINING_STEPS},)
-    model.save("model_%d" % NB_TRAINING_STEPS)
+    agent3.play_against( env_algorithm=dqn_training, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_steps": NB_TRAINING_STEPS},)
+    model.save(f"model_3_{NB_TRAINING_STEPS}")
 
     # Evaluating agent 3
-    print("Agent 4 results against random player:")
-    agent4.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn4, "nb_episodes": NB_EVALUATION_EPISODES},)
-    print("\nAgent 4 results against max player:")
-    agent4.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn4, "nb_episodes": NB_EVALUATION_EPISODES},)
+    # print("Agent 3 results against random player:")
+    # agent3.play_against( env_algorithm=dqn_evaluation, opponent=opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
+    # print("\nAgent 3 results against max player:")
+    # agent3.play_against(env_algorithm=dqn_evaluation, opponent=second_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
+    print("\nAgent 3 results against minimax player:")
+    agent3.play_against(env_algorithm=dqn_evaluation, opponent=third_opponent, env_algorithm_kwargs={"dqn": dqn3, "nb_episodes": NB_EVALUATION_EPISODES},)
